@@ -2,6 +2,7 @@ const express = require("express");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
+const crypto = require("crypto");
 
 const app = express();
 
@@ -13,7 +14,7 @@ if (!fs.existsSync("uploads")) {
   fs.mkdirSync("uploads");
 }
 
-// Cấu hình lưu file
+// Cấu hình upload
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/"),
   filename: (req, file, cb) => {
@@ -23,7 +24,8 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-// ✅ THÊM TRANG CHỦ (fix lỗi Cannot GET /)
+
+// ✅ TRANG CHỦ (không còn lỗi Cannot GET /)
 app.get("/", (req, res) => {
   res.send(`
     <h2>Upload file 🚀</h2>
@@ -34,11 +36,20 @@ app.get("/", (req, res) => {
   `);
 });
 
-// Upload
+
+// ✅ UPLOAD → trả link dạng /get/id
 app.post("/upload", upload.single("file"), (req, res) => {
   if (!req.file) return res.send("Không có file!");
 
-  const link = `${req.protocol}://${req.get("host")}/download/${req.file.filename}`;
+  const id = crypto.randomBytes(5).toString("hex");
+  const newName = id + path.extname(req.file.originalname);
+
+  fs.renameSync(
+    path.join("uploads", req.file.filename),
+    path.join("uploads", newName)
+  );
+
+  const link = `${req.protocol}://${req.get("host")}/get/${id}`;
 
   res.send(`
     <p>Upload thành công ✅</p>
@@ -46,15 +57,16 @@ app.post("/upload", upload.single("file"), (req, res) => {
   `);
 });
 
-// Download
-app.get("/download/:file", (req, res) => {
-  const filePath = path.join(__dirname, "uploads", req.params.file);
 
-  if (fs.existsSync(filePath)) {
-    res.download(filePath);
-  } else {
-    res.send("Không thấy file");
-  }
+// ✅ LINK DOWNLOAD ĐẸP
+app.get("/get/:id", (req, res) => {
+  const files = fs.readdirSync("uploads");
+  const file = files.find(f => f.startsWith(req.params.id));
+
+  if (!file) return res.send("Không tìm thấy file");
+
+  res.download(path.join(__dirname, "uploads", file));
 });
+
 
 app.listen(PORT, () => console.log("Server chạy cổng " + PORT));
